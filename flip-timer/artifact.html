@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Flip Timer</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: #1A1A2E;
+    color: #EAEAEA;
+  }
+
+  .app {
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2rem; padding: 1.5rem;
+    transition: background-color 0.8s ease;
+  }
+
+  /* Mode indicator */
+  .mode-label {
+    font-size: 0.85rem; font-weight: 500;
+    letter-spacing: 0.3em; text-transform: uppercase;
+    transition: color 0.6s ease;
+  }
+
+  /* Timer ring */
+  .timer-container { cursor: pointer; position: relative; }
+  .timer-ring { transform: rotate(-90deg); }
+  .timer-ring-track { fill: none; stroke: #2A2A4A; }
+  .timer-ring-progress { fill: none; stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke 0.6s ease; }
+  .timer-content {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .timer-time {
+    font-size: 3.2rem; font-weight: 200;
+    letter-spacing: 0.1em;
+    font-variant-numeric: tabular-nums;
+  }
+  .timer-hint { font-size: 0.7rem; color: #8888AA; margin-top: 0.5rem; }
+
+  /* Pulse animation */
+  @keyframes subtle-pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+  .pulse { animation: subtle-pulse 2s ease-in-out infinite; }
+
+  /* Time selector */
+  .time-selector { display: flex; gap: 0.75rem; justify-content: center; }
+  .time-btn {
+    width: 3.5rem; height: 3.5rem; border-radius: 50%;
+    font-size: 0.85rem; font-weight: 500;
+    border: 2px solid #2A2A4A; background: transparent;
+    color: #8888AA; cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: inherit;
+  }
+  .time-btn:active { transform: scale(0.95); }
+  .time-btn.active { background: rgba(255,255,255,0.05); }
+
+  /* Permission prompt */
+  .permission {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #1A1A2E; z-index: 50; padding: 2rem;
+  }
+  .permission-inner { text-align: center; max-width: 20rem; }
+  .permission-icon {
+    width: 5rem; height: 5rem; margin: 0 auto 2rem;
+    border-radius: 50%; border: 2px solid #E94560;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .permission h1 { font-size: 1.5rem; font-weight: 300; margin-bottom: 0.75rem; }
+  .permission p { font-size: 0.85rem; color: #8888AA; line-height: 1.6; margin-bottom: 2rem; }
+  .permission-btn {
+    padding: 0.75rem 2rem; border-radius: 9999px;
+    font-size: 0.85rem; font-weight: 500;
+    border: 2px solid #E94560; background: transparent;
+    color: #E94560; cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: inherit;
+  }
+  .permission-btn:hover { background: #E94560; color: white; }
+  .permission-btn:active { transform: scale(0.95); }
+
+  .rotation-hint { font-size: 0.7rem; color: #8888AA; text-align: center; }
+
+  @keyframes fade-in { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+  .fade-in { animation: fade-in 0.5s ease-out; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ── Helpers ──
+function formatTime(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function playBell() {
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    [[830,0.3,2],[1245,0.15,1.5],[2490,0.08,1]].forEach(([freq,vol,dur]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now); osc.stop(now + dur);
+    });
+  } catch {}
+}
+
+function vibrateDevice() {
+  if (navigator.vibrate) navigator.vibrate([200,100,200,100,400]);
+}
+
+// ── useTimer ──
+function useTimer(onFinish) {
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [totalTime, setTotalTime] = useState(0);
+  const [state, setState] = useState('idle');
+  const intervalRef = useRef(null);
+  const endTimeRef = useRef(0);
+  const onFinishRef = useRef(onFinish);
+  onFinishRef.current = onFinish;
+
+  const clearTimer = useCallback(() => {
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+  }, []);
+
+  const tick = useCallback(() => {
+    const remaining = Math.max(0, endTimeRef.current - Date.now());
+    setTimeLeft(Math.ceil(remaining / 1000));
+    if (remaining <= 0) { clearTimer(); setState('finished'); onFinishRef.current?.(); }
+  }, [clearTimer]);
+
+  const start = useCallback((seconds) => {
+    clearTimer();
+    setTotalTime(seconds); setTimeLeft(seconds);
+    endTimeRef.current = Date.now() + seconds * 1000;
+    setState('running');
+    intervalRef.current = setInterval(tick, 250);
+  }, [clearTimer, tick]);
+
+  const pause = useCallback(() => {
+    if (state !== 'running') return;
+    clearTimer();
+    setTimeLeft(Math.ceil(Math.max(0, endTimeRef.current - Date.now()) / 1000));
+    setState('paused');
+  }, [state, clearTimer]);
+
+  const resume = useCallback(() => {
+    if (state !== 'paused') return;
+    endTimeRef.current = Date.now() + timeLeft * 1000;
+    setState('running');
+    intervalRef.current = setInterval(tick, 250);
+  }, [state, timeLeft, tick]);
+
+  const reset = useCallback(() => { clearTimer(); setTimeLeft(0); setTotalTime(0); setState('idle'); }, [clearTimer]);
+
+  useEffect(() => clearTimer, [clearTimer]);
+
+  return { timeLeft, totalTime, state, progress: totalTime > 0 ? 1 - timeLeft / totalTime : 0, start, pause, resume, reset };
+}
+
+// ── useDeviceOrientation ──
+function useDeviceOrientation() {
+  const [mode, setMode] = useState('focus');
+  const [permissionGranted, setPermissionGranted] = useState(false);
+  const [permissionDenied, setPermissionDenied] = useState(false);
+  const currentModeRef = useRef('focus');
+  const isSupported = typeof DeviceOrientationEvent !== 'undefined';
+
+  const handleOrientation = useCallback((e) => {
+    if (e.beta === null) return;
+    const abs = Math.abs(e.beta);
+    if (currentModeRef.current === 'focus' && abs > 140) {
+      currentModeRef.current = 'break'; setMode('break');
+    } else if (currentModeRef.current === 'break' && abs < 40) {
+      currentModeRef.current = 'focus'; setMode('focus');
+    }
+  }, []);
+
+  const requestPermission = useCallback(async () => {
+    try {
+      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const result = await DeviceOrientationEvent.requestPermission();
+        if (result === 'granted') { setPermissionGranted(true); window.addEventListener('deviceorientation', handleOrientation); }
+        else setPermissionDenied(true);
+      } else {
+        setPermissionGranted(true);
+        window.addEventListener('deviceorientation', handleOrientation);
+      }
+    } catch { setPermissionDenied(true); }
+  }, [handleOrientation]);
+
+  useEffect(() => () => window.removeEventListener('deviceorientation', handleOrientation), [handleOrientation]);
+
+  return { mode, permissionGranted, permissionDenied, isSupported, requestPermission };
+}
+
+// ── Components ──
+function TimerRing({ progress, accentColor, children }) {
+  const size = 280, sw = 6, r = (size - sw) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <div style={{ position:'relative', width:size, height:size }}>
+      <svg width={size} height={size} className="timer-ring">
+        <circle cx={size/2} cy={size/2} r={r} className="timer-ring-track" strokeWidth={sw}/>
+        <circle cx={size/2} cy={size/2} r={r} className="timer-ring-progress"
+          stroke={accentColor} strokeWidth={sw}
+          strokeDasharray={c} strokeDashoffset={c*(1-progress)}/>
+      </svg>
+      <div className="timer-content">{children}</div>
+    </div>
+  );
+}
+
+function TimeSelector({ options, selected, onSelect, accentColor }) {
+  return (
+    <div className="time-selector">
+      {options.map(m => (
+        <button key={m} onClick={() => onSelect(m)}
+          className={`time-btn ${selected === m ? 'active' : ''}`}
+          style={selected === m ? { borderColor: accentColor, color: accentColor } : {}}>
+          {m}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PermissionPrompt({ onRequest, denied }) {
+  return (
+    <div className="permission">
+      <div className="permission-inner fade-in">
+        <div className="permission-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#E94560" strokeWidth="2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </div>
+        <h1>Flip Timer</h1>
+        <p>{denied
+          ? 'Sensor-Zugriff wurde abgelehnt. Du kannst die App trotzdem manuell bedienen.'
+          : 'Flip Timer nutzt den Bewegungssensor deines iPhones, um zwischen Fokus und Pause zu wechseln. Drehe dein Handy auf der Ladestation um den Modus zu ändern.'}</p>
+        <button className="permission-btn" onClick={onRequest}>
+          {denied ? 'Ohne Sensoren fortfahren' : 'Sensoren aktivieren'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── App ──
+const FOCUS_OPTIONS = [25, 45, 60];
+const BREAK_OPTIONS = [5, 10, 15];
+const COLORS = { focus: '#E94560', break: '#4DA8DA' };
+
+function App() {
+  const [setupDone, setSetupDone] = useState(false);
+  const [focusMin, setFocusMin] = useState(25);
+  const [breakMin, setBreakMin] = useState(5);
+  const prevModeRef = useRef('focus');
+
+  const onFinish = useCallback(() => { playBell(); vibrateDevice(); }, []);
+  const timer = useTimer(onFinish);
+  const orientation = useDeviceOrientation();
+
+  const currentMode = orientation.permissionGranted ? orientation.mode : 'focus';
+  const accent = COLORS[currentMode];
+  const options = currentMode === 'focus' ? FOCUS_OPTIONS : BREAK_OPTIONS;
+  const selectedMin = currentMode === 'focus' ? focusMin : breakMin;
+
+  // Wake lock
+  useEffect(() => {
+    if (timer.state === 'running' && navigator.wakeLock) {
+      let sentinel;
+      navigator.wakeLock.request('screen').then(s => sentinel = s).catch(() => {});
+      return () => sentinel?.release();
+    }
+  }, [timer.state]);
+
+  // Rotation mode switch
+  useEffect(() => {
+    if (!orientation.permissionGranted || prevModeRef.current === orientation.mode) return;
+    prevModeRef.current = orientation.mode;
+    const min = orientation.mode === 'focus' ? focusMin : breakMin;
+    timer.start(min * 60);
+  }, [orientation.mode, orientation.permissionGranted, focusMin, breakMin]);
+
+  const handlePermission = async () => {
+    if (orientation.isSupported && !orientation.permissionDenied) await orientation.requestPermission();
+    setSetupDone(true);
+  };
+
+  const handleTimeSelect = (m) => {
+    if (currentMode === 'focus') setFocusMin(m); else setBreakMin(m);
+    timer.start(m * 60);
+  };
+
+  const handleTap = () => {
+    switch (timer.state) {
+      case 'idle': case 'finished': timer.start(selectedMin * 60); break;
+      case 'running': timer.pause(); break;
+      case 'paused': timer.resume(); break;
+    }
+  };
+
+  if (!setupDone) return <PermissionPrompt onRequest={handlePermission} denied={orientation.permissionDenied}/>;
+
+  const displayTime = timer.state === 'idle' ? formatTime(selectedMin * 60) : formatTime(timer.timeLeft);
+  const isRunning = timer.state === 'running';
+
+  const hints = { idle: 'Tippen zum Starten', running: 'Tippen zum Pausieren', paused: 'Tippen zum Fortsetzen', finished: 'Fertig! Tippen für Neustart' };
+
+  return (
+    <div className="app">
+      <span className="mode-label" style={{ color: accent }}>
+        {currentMode === 'focus' ? 'Fokus' : 'Pause'}
+      </span>
+
+      <div className="timer-container" onClick={handleTap}>
+        <TimerRing progress={timer.state === 'idle' ? 0 : timer.progress} accentColor={accent}>
+          <span className={`timer-time ${isRunning ? 'pulse' : ''}`}>{displayTime}</span>
+          <span className="timer-hint">{hints[timer.state]}</span>
+        </TimerRing>
+      </div>
+
+      <TimeSelector options={options} selected={selectedMin} onSelect={handleTimeSelect} accentColor={accent}/>
+
+      {orientation.permissionGranted && (
+        <p className="rotation-hint">Drehe dein iPhone um den Modus zu wechseln</p>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
