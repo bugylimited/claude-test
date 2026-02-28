@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #1A1A2E;
+  --color-bg-secondary: #16213E;
+  --color-focus-accent: #E94560;
+  --color-break-accent: #4DA8DA;
+  --color-text-primary: #EAEAEA;
+  --color-text-muted: #8888AA;
+  --color-ring-track: #2A2A4A;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+/* Smooth mode transitions */
+.mode-transition {
+  transition: background-color 0.8s ease, color 0.6s ease;
+}
+
+/* Timer ring animation */
+.timer-ring-progress {
+  transition: stroke-dashoffset 1s linear;
+}
+
+/* Pulse animation for active timer */
+@keyframes subtle-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.timer-pulse {
+  animation: subtle-pulse 2s ease-in-out infinite;
+}
+
+/* Button press effect */
+.btn-press:active {
+  transform: scale(0.95);
+}
+
+/* Fade in animation */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out;
+}
