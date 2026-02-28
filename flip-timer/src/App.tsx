@@ -6,6 +6,7 @@ import { PermissionPrompt } from './components/PermissionPrompt'
 import { useTimer } from './hooks/useTimer'
 import { useDeviceOrientation, type OrientationMode } from './hooks/useDeviceOrientation'
 import { useWakeLock } from './hooks/useWakeLock'
+import { useSwipeTime } from './hooks/useSwipeTime'
 import { playBell, vibrate } from './utils/audio'
 import { formatTime } from './utils/format'
 
@@ -29,12 +30,26 @@ function App() {
   const wakeLock = useWakeLock()
 
   const currentMode = orientation.permissionGranted ? orientation.mode : 'focus'
+
   const accentColor = currentMode === 'focus'
     ? 'var(--color-focus-accent)'
     : 'var(--color-break-accent)'
+  const accentColorSecondary = currentMode === 'focus'
+    ? 'var(--color-focus-accent-secondary)'
+    : 'var(--color-break-accent-secondary)'
+  const glowColor = currentMode === 'focus' ? '#FF6B6B' : '#4ECDC4'
 
   const currentOptions = currentMode === 'focus' ? FOCUS_OPTIONS : BREAK_OPTIONS
   const selectedMinutes = currentMode === 'focus' ? focusMinutes : breakMinutes
+
+  const swipe = useSwipeTime({
+    timeLeft: timer.timeLeft,
+    totalTime: timer.totalTime,
+    onAdjust: timer.adjustTimeLeft,
+    minTime: 60,
+    stepSeconds: 60,
+    pixelsPerStep: 30,
+  })
 
   // Handle mode changes from rotation
   useEffect(() => {
@@ -73,6 +88,9 @@ function App() {
   }
 
   const handleTapTimer = () => {
+    // Don't trigger tap if we were swiping
+    if (swipe.isSwiping) return
+
     switch (timer.state) {
       case 'idle':
       case 'finished':
@@ -97,36 +115,45 @@ function App() {
     )
   }
 
+  // Show preview time while swiping, otherwise normal display
+  const displaySeconds = swipe.previewTime ?? timer.timeLeft
   const displayTime = timer.state === 'idle'
     ? formatTime(selectedMinutes * 60)
-    : formatTime(timer.timeLeft)
+    : formatTime(displaySeconds)
 
   const isActive = timer.state === 'running'
+  const canSwipe = timer.state === 'running' || timer.state === 'paused'
 
   return (
     <div
       className="mode-transition w-full h-full flex flex-col items-center justify-center gap-8 px-6"
-      style={{ backgroundColor: 'var(--color-bg-primary)' }}
     >
       {/* Mode indicator */}
       <ModeIndicator mode={currentMode} />
 
-      {/* Timer ring */}
+      {/* Timer ring with swipe support */}
       <div
         onClick={handleTapTimer}
-        className="cursor-pointer"
+        onTouchStart={canSwipe ? swipe.onTouchStart : undefined}
+        onTouchMove={canSwipe ? swipe.onTouchMove : undefined}
+        onTouchEnd={canSwipe ? swipe.onTouchEnd : undefined}
+        className={`cursor-pointer ${swipe.isSwiping ? 'swiping' : ''}`}
         role="button"
         tabIndex={0}
         aria-label={isActive ? 'Pause timer' : 'Start timer'}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleTapTimer() }}
       >
         <TimerRing
-          progress={timer.state === 'idle' ? 0 : timer.progress}
+          progress={timer.state === 'idle' ? 0 : swipe.previewTime !== null
+            ? 1 - swipe.previewTime / timer.totalTime
+            : timer.progress}
           accentColor={accentColor}
+          accentColorSecondary={accentColorSecondary}
+          glowColor={glowColor}
         >
           {/* Time display */}
           <span
-            className={`text-5xl font-extralight tabular-nums tracking-wider ${isActive ? 'timer-pulse' : ''}`}
+            className={`text-5xl font-extralight tabular-nums tracking-wider ${isActive && !swipe.isSwiping ? 'timer-pulse' : ''}`}
             style={{ color: 'var(--color-text-primary)' }}
           >
             {displayTime}
@@ -134,11 +161,19 @@ function App() {
 
           {/* State hint */}
           <span className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
-            {timer.state === 'idle' && 'Tippen zum Starten'}
-            {timer.state === 'running' && 'Tippen zum Pausieren'}
-            {timer.state === 'paused' && 'Tippen zum Fortsetzen'}
-            {timer.state === 'finished' && 'Fertig! Tippen für Neustart'}
+            {swipe.isSwiping && 'Wischen zum Anpassen'}
+            {!swipe.isSwiping && timer.state === 'idle' && 'Tippen zum Starten'}
+            {!swipe.isSwiping && timer.state === 'running' && 'Tippen zum Pausieren'}
+            {!swipe.isSwiping && timer.state === 'paused' && 'Tippen zum Fortsetzen'}
+            {!swipe.isSwiping && timer.state === 'finished' && 'Fertig! Tippen für Neustart'}
           </span>
+
+          {/* Swipe hint when timer is active but not swiping */}
+          {canSwipe && !swipe.isSwiping && (
+            <span className="text-[10px] mt-1" style={{ color: 'var(--color-text-muted)', opacity: 0.5 }}>
+              ↕ Wischen für Zeitanpassung
+            </span>
+          )}
         </TimerRing>
       </div>
 

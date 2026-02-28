@@ -11,6 +11,7 @@ interface UseTimerReturn {
   pause: () => void
   resume: () => void
   reset: () => void
+  adjustTimeLeft: (seconds: number) => void
 }
 
 export function useTimer(onFinish?: () => void): UseTimerReturn {
@@ -73,11 +74,24 @@ export function useTimer(onFinish?: () => void): UseTimerReturn {
     setState('idle')
   }, [clearTimer])
 
+  const adjustTimeLeft = useCallback((seconds: number) => {
+    const clamped = Math.max(0, Math.min(totalTime, seconds))
+    setTimeLeft(clamped)
+    if (state === 'running') {
+      endTimeRef.current = Date.now() + clamped * 1000
+    }
+    if (state === 'finished' && clamped > 0) {
+      endTimeRef.current = Date.now() + clamped * 1000
+      setState('running')
+      intervalRef.current = setInterval(tick, 250)
+    }
+  }, [totalTime, state, tick])
+
   useEffect(() => {
     return clearTimer
   }, [clearTimer])
 
   const progress = totalTime > 0 ? 1 - timeLeft / totalTime : 0
 
-  return { timeLeft, totalTime, state, progress, start, pause, resume, reset }
+  return { timeLeft, totalTime, state, progress, start, pause, resume, reset, adjustTimeLeft }
 }

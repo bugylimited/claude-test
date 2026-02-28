@@ -12,8 +12,8 @@
   html, body, #root { width: 100%; height: 100%; overflow: hidden; }
   body {
     font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    background: #1A1A2E;
-    color: #EAEAEA;
+    background: radial-gradient(ellipse at 50% 0%, #1A1A3E 0%, #0F0F1A 70%);
+    color: #F0F0F5;
   }
 
   .app {
@@ -24,18 +24,19 @@
     transition: background-color 0.8s ease;
   }
 
-  /* Mode indicator */
   .mode-label {
     font-size: 0.85rem; font-weight: 500;
     letter-spacing: 0.3em; text-transform: uppercase;
     transition: color 0.6s ease;
   }
 
-  /* Timer ring */
-  .timer-container { cursor: pointer; position: relative; }
+  .timer-container { cursor: pointer; position: relative; touch-action: none; }
   .timer-ring { transform: rotate(-90deg); }
-  .timer-ring-track { fill: none; stroke: #2A2A4A; }
-  .timer-ring-progress { fill: none; stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke 0.6s ease; }
+  .timer-ring-track { fill: none; stroke: #252545; }
+  .timer-ring-progress {
+    fill: none; stroke-linecap: round;
+    transition: stroke-dashoffset 1s linear;
+  }
   .timer-content {
     position: absolute; inset: 0;
     display: flex; flex-direction: column;
@@ -46,51 +47,50 @@
     letter-spacing: 0.1em;
     font-variant-numeric: tabular-nums;
   }
-  .timer-hint { font-size: 0.7rem; color: #8888AA; margin-top: 0.5rem; }
+  .timer-hint { font-size: 0.7rem; color: #9090B0; margin-top: 0.5rem; }
+  .timer-swipe-hint { font-size: 0.6rem; color: #9090B0; margin-top: 0.25rem; opacity: 0.5; }
 
-  /* Pulse animation */
   @keyframes subtle-pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
   .pulse { animation: subtle-pulse 2s ease-in-out infinite; }
 
-  /* Time selector */
   .time-selector { display: flex; gap: 0.75rem; justify-content: center; }
   .time-btn {
     width: 3.5rem; height: 3.5rem; border-radius: 50%;
     font-size: 0.85rem; font-weight: 500;
-    border: 2px solid #2A2A4A; background: transparent;
-    color: #8888AA; cursor: pointer;
+    border: 2px solid #252545; background: transparent;
+    color: #9090B0; cursor: pointer;
     transition: all 0.3s ease;
     font-family: inherit;
   }
   .time-btn:active { transform: scale(0.95); }
   .time-btn.active { background: rgba(255,255,255,0.05); }
 
-  /* Permission prompt */
   .permission {
     position: fixed; inset: 0;
     display: flex; align-items: center; justify-content: center;
-    background: #1A1A2E; z-index: 50; padding: 2rem;
+    background: radial-gradient(ellipse at 50% 0%, #1A1A3E 0%, #0F0F1A 70%);
+    z-index: 50; padding: 2rem;
   }
   .permission-inner { text-align: center; max-width: 20rem; }
   .permission-icon {
     width: 5rem; height: 5rem; margin: 0 auto 2rem;
-    border-radius: 50%; border: 2px solid #E94560;
+    border-radius: 50%; border: 2px solid #FF6B6B;
     display: flex; align-items: center; justify-content: center;
   }
   .permission h1 { font-size: 1.5rem; font-weight: 300; margin-bottom: 0.75rem; }
-  .permission p { font-size: 0.85rem; color: #8888AA; line-height: 1.6; margin-bottom: 2rem; }
+  .permission p { font-size: 0.85rem; color: #9090B0; line-height: 1.6; margin-bottom: 2rem; }
   .permission-btn {
     padding: 0.75rem 2rem; border-radius: 9999px;
     font-size: 0.85rem; font-weight: 500;
-    border: 2px solid #E94560; background: transparent;
-    color: #E94560; cursor: pointer;
+    border: 2px solid #FF6B6B; background: transparent;
+    color: #FF6B6B; cursor: pointer;
     transition: all 0.3s ease;
     font-family: inherit;
   }
-  .permission-btn:hover { background: #E94560; color: white; }
+  .permission-btn:hover { background: #FF6B6B; color: white; }
   .permission-btn:active { transform: scale(0.95); }
 
-  .rotation-hint { font-size: 0.7rem; color: #8888AA; text-align: center; }
+  .rotation-hint { font-size: 0.7rem; color: #9090B0; text-align: center; }
 
   @keyframes fade-in { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
   .fade-in { animation: fade-in 0.5s ease-out; }
@@ -100,6 +100,12 @@
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useEffect, useCallback, useRef } = React;
+
+// ── Colors ──
+const COLORS = {
+  focus: { primary: '#FF6B6B', secondary: '#FFA07A', glow: '#FF6B6B' },
+  break: { primary: '#4ECDC4', secondary: '#45B7D1', glow: '#4ECDC4' },
+};
 
 // ── Helpers ──
 function formatTime(totalSeconds) {
@@ -125,9 +131,8 @@ function playBell() {
   } catch {}
 }
 
-function vibrateDevice() {
-  if (navigator.vibrate) navigator.vibrate([200,100,200,100,400]);
-}
+function vibrateDevice() { if (navigator.vibrate) navigator.vibrate([200,100,200,100,400]); }
+function tickVibrate() { if (navigator.vibrate) navigator.vibrate(8); }
 
 // ── useTimer ──
 function useTimer(onFinish) {
@@ -173,9 +178,57 @@ function useTimer(onFinish) {
 
   const reset = useCallback(() => { clearTimer(); setTimeLeft(0); setTotalTime(0); setState('idle'); }, [clearTimer]);
 
+  const adjustTimeLeft = useCallback((seconds) => {
+    const clamped = Math.max(0, Math.min(totalTime, seconds));
+    setTimeLeft(clamped);
+    if (state === 'running') endTimeRef.current = Date.now() + clamped * 1000;
+    if (state === 'finished' && clamped > 0) {
+      endTimeRef.current = Date.now() + clamped * 1000;
+      setState('running');
+      intervalRef.current = setInterval(tick, 250);
+    }
+  }, [totalTime, state, tick]);
+
   useEffect(() => clearTimer, [clearTimer]);
 
-  return { timeLeft, totalTime, state, progress: totalTime > 0 ? 1 - timeLeft / totalTime : 0, start, pause, resume, reset };
+  return { timeLeft, totalTime, state, progress: totalTime > 0 ? 1 - timeLeft / totalTime : 0, start, pause, resume, reset, adjustTimeLeft };
+}
+
+// ── useSwipeTime ──
+function useSwipeTime({ timeLeft, totalTime, onAdjust, minTime = 60, stepSeconds = 60, pixelsPerStep = 30 }) {
+  const [isSwiping, setIsSwiping] = useState(false);
+  const [previewTime, setPreviewTime] = useState(null);
+  const startYRef = useRef(0);
+  const startTimeRef = useRef(0);
+  const lastStepRef = useRef(0);
+  const isSwipingRef = useRef(false);
+
+  const onTouchStart = useCallback((e) => {
+    startYRef.current = e.touches[0].clientY;
+    startTimeRef.current = timeLeft;
+    lastStepRef.current = 0;
+  }, [timeLeft]);
+
+  const onTouchMove = useCallback((e) => {
+    const deltaY = startYRef.current - e.touches[0].clientY;
+    if (!isSwipingRef.current && Math.abs(deltaY) < 10) return;
+    if (!isSwipingRef.current) { isSwipingRef.current = true; setIsSwiping(true); }
+
+    const steps = Math.round(deltaY / pixelsPerStep);
+    const newTime = Math.max(minTime, Math.min(totalTime, startTimeRef.current + steps * stepSeconds));
+    setPreviewTime(newTime);
+
+    if (steps !== lastStepRef.current) { lastStepRef.current = steps; tickVibrate(); }
+  }, [pixelsPerStep, stepSeconds, minTime, totalTime]);
+
+  const onTouchEnd = useCallback(() => {
+    if (isSwipingRef.current && previewTime !== null) onAdjust(previewTime);
+    isSwipingRef.current = false;
+    setIsSwiping(false);
+    setPreviewTime(null);
+  }, [previewTime, onAdjust]);
+
+  return { onTouchStart, onTouchMove, onTouchEnd, isSwiping, previewTime };
 }
 
 // ── useDeviceOrientation ──
@@ -189,11 +242,8 @@ function useDeviceOrientation() {
   const handleOrientation = useCallback((e) => {
     if (e.beta === null) return;
     const abs = Math.abs(e.beta);
-    if (currentModeRef.current === 'focus' && abs > 140) {
-      currentModeRef.current = 'break'; setMode('break');
-    } else if (currentModeRef.current === 'break' && abs < 40) {
-      currentModeRef.current = 'focus'; setMode('focus');
-    }
+    if (currentModeRef.current === 'focus' && abs > 140) { currentModeRef.current = 'break'; setMode('break'); }
+    else if (currentModeRef.current === 'break' && abs < 40) { currentModeRef.current = 'focus'; setMode('focus'); }
   }, []);
 
   const requestPermission = useCallback(async () => {
@@ -202,10 +252,7 @@ function useDeviceOrientation() {
         const result = await DeviceOrientationEvent.requestPermission();
         if (result === 'granted') { setPermissionGranted(true); window.addEventListener('deviceorientation', handleOrientation); }
         else setPermissionDenied(true);
-      } else {
-        setPermissionGranted(true);
-        window.addEventListener('deviceorientation', handleOrientation);
-      }
+      } else { setPermissionGranted(true); window.addEventListener('deviceorientation', handleOrientation); }
     } catch { setPermissionDenied(true); }
   }, [handleOrientation]);
 
@@ -214,30 +261,38 @@ function useDeviceOrientation() {
   return { mode, permissionGranted, permissionDenied, isSupported, requestPermission };
 }
 
-// ── Components ──
-function TimerRing({ progress, accentColor, children }) {
+// ── TimerRing ──
+function TimerRing({ progress, colors, children }) {
   const size = 280, sw = 6, r = (size - sw) / 2;
   const c = 2 * Math.PI * r;
   return (
     <div style={{ position:'relative', width:size, height:size }}>
       <svg width={size} height={size} className="timer-ring">
+        <defs>
+          <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={colors.primary}/>
+            <stop offset="100%" stopColor={colors.secondary}/>
+          </linearGradient>
+        </defs>
         <circle cx={size/2} cy={size/2} r={r} className="timer-ring-track" strokeWidth={sw}/>
         <circle cx={size/2} cy={size/2} r={r} className="timer-ring-progress"
-          stroke={accentColor} strokeWidth={sw}
-          strokeDasharray={c} strokeDashoffset={c*(1-progress)}/>
+          stroke="url(#ring-grad)" strokeWidth={sw}
+          strokeDasharray={c} strokeDashoffset={c*(1-progress)}
+          style={{ filter: `drop-shadow(0 0 6px ${colors.glow})` }}/>
       </svg>
       <div className="timer-content">{children}</div>
     </div>
   );
 }
 
-function TimeSelector({ options, selected, onSelect, accentColor }) {
+// ── TimeSelector ──
+function TimeSelector({ options, selected, onSelect, color }) {
   return (
     <div className="time-selector">
       {options.map(m => (
         <button key={m} onClick={() => onSelect(m)}
           className={`time-btn ${selected === m ? 'active' : ''}`}
-          style={selected === m ? { borderColor: accentColor, color: accentColor } : {}}>
+          style={selected === m ? { borderColor: color, color: color } : {}}>
           {m}
         </button>
       ))}
@@ -245,12 +300,13 @@ function TimeSelector({ options, selected, onSelect, accentColor }) {
   );
 }
 
+// ── PermissionPrompt ──
 function PermissionPrompt({ onRequest, denied }) {
   return (
     <div className="permission">
       <div className="permission-inner fade-in">
         <div className="permission-icon">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#E94560" strokeWidth="2" strokeLinecap="round">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" strokeWidth="2" strokeLinecap="round">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
         </div>
@@ -269,7 +325,6 @@ function PermissionPrompt({ onRequest, denied }) {
 // ── App ──
 const FOCUS_OPTIONS = [25, 45, 60];
 const BREAK_OPTIONS = [5, 10, 15];
-const COLORS = { focus: '#E94560', break: '#4DA8DA' };
 
 function App() {
   const [setupDone, setSetupDone] = useState(false);
@@ -282,9 +337,17 @@ function App() {
   const orientation = useDeviceOrientation();
 
   const currentMode = orientation.permissionGranted ? orientation.mode : 'focus';
-  const accent = COLORS[currentMode];
+  const colors = COLORS[currentMode];
   const options = currentMode === 'focus' ? FOCUS_OPTIONS : BREAK_OPTIONS;
   const selectedMin = currentMode === 'focus' ? focusMin : breakMin;
+
+  const swipe = useSwipeTime({
+    timeLeft: timer.timeLeft,
+    totalTime: timer.totalTime,
+    onAdjust: timer.adjustTimeLeft,
+  });
+
+  const canSwipe = timer.state === 'running' || timer.state === 'paused';
 
   // Wake lock
   useEffect(() => {
@@ -299,8 +362,7 @@ function App() {
   useEffect(() => {
     if (!orientation.permissionGranted || prevModeRef.current === orientation.mode) return;
     prevModeRef.current = orientation.mode;
-    const min = orientation.mode === 'focus' ? focusMin : breakMin;
-    timer.start(min * 60);
+    timer.start((orientation.mode === 'focus' ? focusMin : breakMin) * 60);
   }, [orientation.mode, orientation.permissionGranted, focusMin, breakMin]);
 
   const handlePermission = async () => {
@@ -314,6 +376,7 @@ function App() {
   };
 
   const handleTap = () => {
+    if (swipe.isSwiping) return;
     switch (timer.state) {
       case 'idle': case 'finished': timer.start(selectedMin * 60); break;
       case 'running': timer.pause(); break;
@@ -323,25 +386,39 @@ function App() {
 
   if (!setupDone) return <PermissionPrompt onRequest={handlePermission} denied={orientation.permissionDenied}/>;
 
-  const displayTime = timer.state === 'idle' ? formatTime(selectedMin * 60) : formatTime(timer.timeLeft);
+  const displaySeconds = swipe.previewTime != null ? swipe.previewTime : timer.timeLeft;
+  const displayTime = timer.state === 'idle' ? formatTime(selectedMin * 60) : formatTime(displaySeconds);
+  const ringProgress = timer.state === 'idle' ? 0
+    : swipe.previewTime != null ? 1 - swipe.previewTime / timer.totalTime
+    : timer.progress;
   const isRunning = timer.state === 'running';
-
-  const hints = { idle: 'Tippen zum Starten', running: 'Tippen zum Pausieren', paused: 'Tippen zum Fortsetzen', finished: 'Fertig! Tippen für Neustart' };
 
   return (
     <div className="app">
-      <span className="mode-label" style={{ color: accent }}>
+      <span className="mode-label" style={{ color: colors.primary }}>
         {currentMode === 'focus' ? 'Fokus' : 'Pause'}
       </span>
 
-      <div className="timer-container" onClick={handleTap}>
-        <TimerRing progress={timer.state === 'idle' ? 0 : timer.progress} accentColor={accent}>
-          <span className={`timer-time ${isRunning ? 'pulse' : ''}`}>{displayTime}</span>
-          <span className="timer-hint">{hints[timer.state]}</span>
+      <div className="timer-container" onClick={handleTap}
+        onTouchStart={canSwipe ? swipe.onTouchStart : undefined}
+        onTouchMove={canSwipe ? swipe.onTouchMove : undefined}
+        onTouchEnd={canSwipe ? swipe.onTouchEnd : undefined}>
+        <TimerRing progress={ringProgress} colors={colors}>
+          <span className={`timer-time ${isRunning && !swipe.isSwiping ? 'pulse' : ''}`}>{displayTime}</span>
+          <span className="timer-hint">
+            {swipe.isSwiping ? 'Wischen zum Anpassen'
+              : timer.state === 'idle' ? 'Tippen zum Starten'
+              : timer.state === 'running' ? 'Tippen zum Pausieren'
+              : timer.state === 'paused' ? 'Tippen zum Fortsetzen'
+              : 'Fertig! Tippen für Neustart'}
+          </span>
+          {canSwipe && !swipe.isSwiping && (
+            <span className="timer-swipe-hint">↕ Wischen für Zeitanpassung</span>
+          )}
         </TimerRing>
       </div>
 
-      <TimeSelector options={options} selected={selectedMin} onSelect={handleTimeSelect} accentColor={accent}/>
+      <TimeSelector options={options} selected={selectedMin} onSelect={handleTimeSelect} color={colors.primary}/>
 
       {orientation.permissionGranted && (
         <p className="rotation-hint">Drehe dein iPhone um den Modus zu wechseln</p>

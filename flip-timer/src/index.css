@@ -1,13 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg-primary: #1A1A2E;
+  --color-bg-primary: #0F0F1A;
   --color-bg-secondary: #16213E;
-  --color-focus-accent: #E94560;
-  --color-break-accent: #4DA8DA;
-  --color-text-primary: #EAEAEA;
-  --color-text-muted: #8888AA;
-  --color-ring-track: #2A2A4A;
+  --color-focus-accent: #FF6B6B;
+  --color-focus-accent-secondary: #FFA07A;
+  --color-break-accent: #4ECDC4;
+  --color-break-accent-secondary: #45B7D1;
+  --color-text-primary: #F0F0F5;
+  --color-text-muted: #9090B0;
+  --color-ring-track: #252545;
 }
 
 * {
@@ -27,8 +29,9 @@ html, body, #root {
 
 body {
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  background-color: var(--color-bg-primary);
+  background: radial-gradient(ellipse at 50% 0%, #1A1A3E 0%, var(--color-bg-primary) 70%);
   color: var(--color-text-primary);
+  min-height: 100%;
 }
 
 /* Smooth mode transitions */
@@ -39,6 +42,21 @@ body {
 /* Timer ring animation */
 .timer-ring-progress {
   transition: stroke-dashoffset 1s linear;
+  filter: drop-shadow(0 0 6px var(--glow-color, #FF6B6B));
+}
+
+/* Glow effect on ring track */
+.timer-ring-glow {
+  filter: drop-shadow(0 0 12px var(--glow-color, #FF6B6B));
+}
+
+/* Swipe hint */
+.swipe-hint {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.swiping .swipe-hint {
+  opacity: 1;
 }
 
 /* Pulse animation for active timer */

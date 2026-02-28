@@ -56,3 +56,9 @@ export function vibrate(): void {
     navigator.vibrate([200, 100, 200, 100, 400])
   }
 }
+
+export function tickVibrate(): void {
+  if ('vibrate' in navigator) {
+    navigator.vibrate(8)
+  }
+}
