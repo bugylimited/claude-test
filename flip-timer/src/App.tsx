@@ -13,6 +13,19 @@ import { formatTime } from './utils/format'
 const FOCUS_OPTIONS = [25, 45, 60] // minutes
 const BREAK_OPTIONS = [5, 10, 15]  // minutes
 
+function useIsLandscape() {
+  const [isLandscape, setIsLandscape] = useState(
+    window.matchMedia('(orientation: landscape)').matches
+  )
+  useEffect(() => {
+    const mql = window.matchMedia('(orientation: landscape)')
+    const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches)
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
+  }, [])
+  return isLandscape
+}
+
 function App() {
   const [setupDone, setSetupDone] = useState(false)
   const [focusMinutes, setFocusMinutes] = useState(25)
@@ -28,6 +41,7 @@ function App() {
   const timer = useTimer(handleTimerFinish)
   const orientation = useDeviceOrientation()
   const wakeLock = useWakeLock()
+  const isLandscape = useIsLandscape()
 
   const currentMode = orientation.permissionGranted ? orientation.mode : 'focus'
 
@@ -124,6 +138,87 @@ function App() {
   const isActive = timer.state === 'running'
   const canSwipe = timer.state === 'running' || timer.state === 'paused'
 
+  const ringSize = isLandscape ? 220 : 280
+  const timerFontClass = isLandscape ? 'text-5xl' : 'text-7xl'
+
+  const timerRingElement = (
+    <div
+      onClick={handleTapTimer}
+      onTouchStart={canSwipe ? swipe.onTouchStart : undefined}
+      onTouchMove={canSwipe ? swipe.onTouchMove : undefined}
+      onTouchEnd={canSwipe ? swipe.onTouchEnd : undefined}
+      className={`cursor-pointer ${swipe.isSwiping ? 'swiping' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-label={isActive ? 'Pause timer' : 'Start timer'}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleTapTimer() }}
+    >
+      <TimerRing
+        progress={timer.state === 'idle' ? 0 : swipe.previewTime !== null
+          ? 1 - swipe.previewTime / timer.totalTime
+          : timer.progress}
+        accentColor={accentColor}
+        accentColorSecondary={accentColorSecondary}
+        glowColor={glowColor}
+        size={ringSize}
+      >
+        {/* Time display */}
+        <span
+          className={`${timerFontClass} font-extralight tabular-nums tracking-wider ${isActive && !swipe.isSwiping ? 'timer-pulse' : ''}`}
+          style={{ color: 'var(--color-text-primary)' }}
+        >
+          {displayTime}
+        </span>
+
+        {/* State hint */}
+        <span className="text-sm mt-2" style={{ color: 'var(--color-text-muted)' }}>
+          {swipe.isSwiping && 'Wischen zum Anpassen'}
+          {!swipe.isSwiping && timer.state === 'idle' && 'Tippen zum Starten'}
+          {!swipe.isSwiping && timer.state === 'running' && 'Tippen zum Pausieren'}
+          {!swipe.isSwiping && timer.state === 'paused' && 'Tippen zum Fortsetzen'}
+          {!swipe.isSwiping && timer.state === 'finished' && 'Fertig! Tippen für Neustart'}
+        </span>
+
+        {/* Swipe hint when timer is active but not swiping */}
+        {canSwipe && !swipe.isSwiping && (
+          <span className="text-xs mt-1" style={{ color: 'var(--color-text-muted)', opacity: 0.5 }}>
+            ↕ Wischen für Zeitanpassung
+          </span>
+        )}
+      </TimerRing>
+    </div>
+  )
+
+  if (isLandscape) {
+    return (
+      <div className="mode-transition w-full h-full flex flex-row items-center justify-center gap-10 px-8">
+        {/* Left side: Mode + Time selector (vertical) */}
+        <div className="flex flex-col items-center justify-center gap-6">
+          <ModeIndicator mode={currentMode} />
+          <TimeSelector
+            options={currentOptions}
+            selected={selectedMinutes}
+            onSelect={handleTimeSelect}
+            accentColor={accentColor}
+            vertical
+          />
+        </div>
+
+        {/* Center: Timer ring */}
+        {timerRingElement}
+
+        {/* Right side: Rotation hint */}
+        {orientation.permissionGranted && (
+          <div className="flex flex-col items-center justify-center w-24">
+            <p className="text-xs text-center leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+              Drehe dein iPhone um den Modus zu wechseln
+            </p>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div
       className="mode-transition w-full h-full flex flex-col items-center justify-center gap-8 px-6"
@@ -132,50 +227,7 @@ function App() {
       <ModeIndicator mode={currentMode} />
 
       {/* Timer ring with swipe support */}
-      <div
-        onClick={handleTapTimer}
-        onTouchStart={canSwipe ? swipe.onTouchStart : undefined}
-        onTouchMove={canSwipe ? swipe.onTouchMove : undefined}
-        onTouchEnd={canSwipe ? swipe.onTouchEnd : undefined}
-        className={`cursor-pointer ${swipe.isSwiping ? 'swiping' : ''}`}
-        role="button"
-        tabIndex={0}
-        aria-label={isActive ? 'Pause timer' : 'Start timer'}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleTapTimer() }}
-      >
-        <TimerRing
-          progress={timer.state === 'idle' ? 0 : swipe.previewTime !== null
-            ? 1 - swipe.previewTime / timer.totalTime
-            : timer.progress}
-          accentColor={accentColor}
-          accentColorSecondary={accentColorSecondary}
-          glowColor={glowColor}
-        >
-          {/* Time display */}
-          <span
-            className={`text-5xl font-extralight tabular-nums tracking-wider ${isActive && !swipe.isSwiping ? 'timer-pulse' : ''}`}
-            style={{ color: 'var(--color-text-primary)' }}
-          >
-            {displayTime}
-          </span>
-
-          {/* State hint */}
-          <span className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
-            {swipe.isSwiping && 'Wischen zum Anpassen'}
-            {!swipe.isSwiping && timer.state === 'idle' && 'Tippen zum Starten'}
-            {!swipe.isSwiping && timer.state === 'running' && 'Tippen zum Pausieren'}
-            {!swipe.isSwiping && timer.state === 'paused' && 'Tippen zum Fortsetzen'}
-            {!swipe.isSwiping && timer.state === 'finished' && 'Fertig! Tippen für Neustart'}
-          </span>
-
-          {/* Swipe hint when timer is active but not swiping */}
-          {canSwipe && !swipe.isSwiping && (
-            <span className="text-[10px] mt-1" style={{ color: 'var(--color-text-muted)', opacity: 0.5 }}>
-              ↕ Wischen für Zeitanpassung
-            </span>
-          )}
-        </TimerRing>
-      </div>
+      {timerRingElement}
 
       {/* Time selector */}
       <TimeSelector
@@ -187,7 +239,7 @@ function App() {
 
       {/* Rotation hint */}
       {orientation.permissionGranted && (
-        <p className="text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
+        <p className="text-sm text-center" style={{ color: 'var(--color-text-muted)' }}>
           Drehe dein iPhone um den Modus zu wechseln
         </p>
       )}

@@ -3,16 +3,17 @@ interface TimeSelectorProps {
   selected: number
   onSelect: (minutes: number) => void
   accentColor: string
+  vertical?: boolean
 }
 
-export function TimeSelector({ options, selected, onSelect, accentColor }: TimeSelectorProps) {
+export function TimeSelector({ options, selected, onSelect, accentColor, vertical }: TimeSelectorProps) {
   return (
-    <div className="flex gap-3 justify-center">
+    <div className={`flex gap-3 justify-center ${vertical ? 'flex-col items-center' : ''}`}>
       {options.map((minutes) => (
         <button
           key={minutes}
           onClick={() => onSelect(minutes)}
-          className="btn-press w-14 h-14 rounded-full text-sm font-medium transition-all duration-300 border-2"
+          className="btn-press w-16 h-16 rounded-full text-base font-medium transition-all duration-300 border-2"
           style={{
             borderColor: selected === minutes ? accentColor : 'var(--color-ring-track)',
             color: selected === minutes ? accentColor : 'var(--color-text-muted)',
